@@ -1,0 +1,39 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "vga-1",
+            "type": "shell",
+            "command": "D:\\Program Files\\NASM\\nasm.exe",
+            "args": [
+                "-f",
+                "bin",
+                "vga-1\\vga-1.asm",
+                "-o",
+                "dos\\vga-1.com"
+            ]
+        },
+        {
+            "label": "vga-2",
+            "type": "shell",
+            "command": "D:\\Program Files\\NASM\\nasm.exe",
+            "args": [
+                "-f",
+                "bin",
+                "vga-2\\vga-2.asm",
+                "-o",
+                "dos\\vga-2.com"
+            ]
+        },
+        {
+            "label": "build all",
+            "dependsOn": ["vga-1", "vga-2"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
