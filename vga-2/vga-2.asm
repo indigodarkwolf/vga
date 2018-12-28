@@ -12,20 +12,6 @@
 ;-------------------------------------
 
 ;
-; Memory offsets
-;
-
-VIDEO_SEGMENT       equ 0a000h  ; Displayed VGA memory maps to this address
-
-VIDEO_BUFFER_WIDTH  equ 640/8 ;672/8   ; Width in bytes
-VIDEO_BUFFER_HEIGHT equ 350 ;384     ; Height in scanlines
-
-PAGE0_OFFSET        equ 0
-PAGE1_OFFSET        equ (VIDEO_BUFFER_WIDTH * VIDEO_BUFFER_HEIGHT)
-BALL_OFFSET         equ PAGE1_OFFSET * 2
-BLANK_OFFSET        equ BALL_OFFSET + 8
-
-;
 ; VGA registers
 ;
 
@@ -84,6 +70,45 @@ VGA_MODE_X                          equ 13h
 ;
 INPUT_STATUS_1_DISPLAY_ENABLED      equ 01h
 INPUT_STATUS_1_VSYNC                equ 08h
+
+;
+; CONFIGURATION
+;
+VGA_MODE            equ VGA_MODE_640x350
+
+;
+; Memory offsets
+;
+
+VIDEO_SEGMENT       equ 0a000h  ; Displayed VGA memory maps to this address
+
+%if VGA_MODE == VGA_MODE_320x200
+    VIDEO_BUFFER_WIDTH  equ 320/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 200     ; Height in scanlines
+%elif VGA_MODE == VGA_MODE_640x200
+    VIDEO_BUFFER_WIDTH  equ 640/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 200     ; Height in scanlines
+%elif VGA_MODE == VGA_MODE_640x350
+    VIDEO_BUFFER_WIDTH  equ 640/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 350     ; Height in scanlines
+%elif VGA_MODE == VGA_MODE_640x480
+    VIDEO_BUFFER_WIDTH  equ 640/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 480     ; Height in scanlines
+%else
+    %error "Unhandled value specified for VGA_MODE"
+%endif
+
+%if VGA_MODE != VGA_MODE_640x480
+    PAGE0_OFFSET        equ 0
+    PAGE1_OFFSET        equ (VIDEO_BUFFER_WIDTH * VIDEO_BUFFER_HEIGHT)
+    BALL_OFFSET         equ PAGE1_OFFSET * 2
+    BLANK_OFFSET        equ BALL_OFFSET + 8
+%else
+    PAGE0_OFFSET        equ 0
+    PAGE1_OFFSET        equ 0
+    BALL_OFFSET         equ (VIDEO_BUFFER_WIDTH * VIDEO_BUFFER_HEIGHT)
+    BLANK_OFFSET        equ BALL_OFFSET + 8
+%endif
 
 ;-------------------------------------
 ;
@@ -215,7 +240,7 @@ start:
     ;
     ; Set video mode to 010h (640x350 VGA)
     ;
-    mov ax, VGA_MODE_640x350 ;VGA_MODE_640x200; VGA_MODE_640x350
+    mov ax, VGA_MODE
     int 10h
 
     mov ax, VIDEO_SEGMENT
@@ -243,32 +268,18 @@ start:
     mov cx, 8*2
     rep stosb
 
-    ;MODIFY_VGA_REGISTER GC_INDEX_REG, GC_MODE, 0bh, 00h | 00h
-    ;SET_VGA_REGISTER GC_INDEX_REG, GC_ENABLE_SET_RESET, 01h
-    ;SET_VGA_REGISTER GC_INDEX_REG, GC_SET_RESET, 01h
     SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, 01h ; Blue plane
     mov si, BallPlane0Image
     mov di, BALL_OFFSET
     mov cx, 8
     rep movsb
 
-    ;SET_VGA_REGISTER GC_INDEX_REG, GC_ENABLE_SET_RESET, 02h
-    ;SET_VGA_REGISTER GC_INDEX_REG, GC_SET_RESET, 02h
     SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, 02h ; Green plane
     mov si, BallPlane0Image
     mov di, BALL_OFFSET
     mov cx, 8
     rep movsb
 
-    ; SET_VGA_REGISTER GC_INDEX_REG, GC_SET_RESET, 08h
-    ; SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, 08h ; Intensity plane
-    ; mov si, BallPlane0Image
-    ; mov di, BALL_OFFSET
-    ; mov cx, 8
-    ; rep movsb
-
-    ;SET_VGA_REGISTER GC_INDEX_REG, GC_ENABLE_SET_RESET, 0fh
-    ;SET_VGA_REGISTER GC_INDEX_REG, GC_SET_RESET, 0fh
     MODIFY_VGA_REGISTER GC_INDEX_REG, GC_MODE, 03h, 01h
 
 .main_loop:

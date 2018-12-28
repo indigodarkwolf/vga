@@ -12,20 +12,6 @@
 ;-------------------------------------
 
 ;
-; Memory offsets
-;
-
-VIDEO_SEGMENT       equ 0a000h  ; Displayed VGA memory maps to this address
-
-VIDEO_BUFFER_WIDTH  equ 640/8 ;672/8   ; Width in bytes
-VIDEO_BUFFER_HEIGHT equ 350 ;384     ; Height in scanlines
-
-PAGE0_OFFSET        equ 0
-PAGE1_OFFSET        equ (VIDEO_BUFFER_WIDTH * VIDEO_BUFFER_HEIGHT)
-BALL_OFFSET         equ PAGE1_OFFSET * 2
-BLANK_OFFSET        equ BALL_OFFSET + 8
-
-;
 ; VGA registers
 ;
 
@@ -84,6 +70,45 @@ VGA_MODE_X                          equ 13h
 ;
 INPUT_STATUS_1_DISPLAY_ENABLED      equ 01h
 INPUT_STATUS_1_VSYNC                equ 08h
+
+;
+; CONFIGURATION
+;
+VGA_MODE            equ VGA_MODE_640x350
+
+;
+; Memory offsets
+;
+
+VIDEO_SEGMENT       equ 0a000h  ; Displayed VGA memory maps to this address
+
+%if VGA_MODE == VGA_MODE_320x200
+    VIDEO_BUFFER_WIDTH  equ 320/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 200     ; Height in scanlines
+%elif VGA_MODE == VGA_MODE_640x200
+    VIDEO_BUFFER_WIDTH  equ 640/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 200     ; Height in scanlines
+%elif VGA_MODE == VGA_MODE_640x350
+    VIDEO_BUFFER_WIDTH  equ 640/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 350     ; Height in scanlines
+%elif VGA_MODE == VGA_MODE_640x480
+    VIDEO_BUFFER_WIDTH  equ 640/8   ; Width in bytes
+    VIDEO_BUFFER_HEIGHT equ 480     ; Height in scanlines
+%else
+    %error "Unhandled value specified for VGA_MODE"
+%endif
+
+%if VGA_MODE != VGA_MODE_640x480
+    PAGE0_OFFSET        equ 0
+    PAGE1_OFFSET        equ (VIDEO_BUFFER_WIDTH * VIDEO_BUFFER_HEIGHT)
+    BALL_OFFSET         equ PAGE1_OFFSET * 2
+    BLANK_OFFSET        equ BALL_OFFSET + 8
+%else
+    PAGE0_OFFSET        equ 0
+    PAGE1_OFFSET        equ 0
+    BALL_OFFSET         equ (VIDEO_BUFFER_WIDTH * VIDEO_BUFFER_HEIGHT)
+    BLANK_OFFSET        equ BALL_OFFSET + 8
+%endif
 
 ;-------------------------------------
 ;
@@ -215,19 +240,22 @@ start:
     ;
     ; Set video mode to 010h (640x350 VGA)
     ;
-    mov ax, VGA_MODE_640x350 ;VGA_MODE_640x200; VGA_MODE_640x350
+    mov ax, VGA_MODE
     int 10h
 
     mov ax, VIDEO_SEGMENT
     mov es, ax
 
     ; Set the logical screen width
+    ; This is counted in words (2-byte increments), or multiples of 16 pixels.
+    ; The screen height doesn't get set, because VGA will just render X scanlines,
+    ; where X is "whatever the height of the screen is".
     SET_VGA_REGISTER CRTC_INDEX_COLOR_REG, CRTC_OFFSET, (VIDEO_BUFFER_WIDTH / 2)
 
     ; Draw borders on both pages
     push bx
 
-    mov bx, 0D0Fh; 0C0Eh
+    mov bx, 0D0Fh;
     mov di, PAGE0_OFFSET
     call draw_border
 
@@ -321,7 +349,7 @@ start:
     mov dx, ax
 
     mov si, BALL_OFFSET
-;    mov cx, word [Ball_pos_x]
+;    mov cx, word [Ball_pos_x]  ; CX and DX already contain the values I need.
 ;    mov dx, word [Ball_pos_y]
     call draw_ball
 
@@ -426,17 +454,22 @@ draw_ball:
     pop di
     ret
 
+;
+; Draw the border around the screen, more or less, in a checkerboard pattern of 8x8 boxes.
+; Expects bl and bh to contain color masks for the border boxes that it will alternate
+; between.
+;
 draw_border:
     push di
     
     mov cx, VIDEO_BUFFER_HEIGHT / 16
     .left_side:
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl; 0Ch     ; Setting draw color to red
-        call draw_box_8x8
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl  ; By setting the SC_MAP_MASK, we're effectively
+        call draw_box_8x8                               ; setting what color we draw to screen.
 
         add di, VIDEO_BUFFER_WIDTH * 8
 
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh; 0Eh     ; Setting draw color to yellow
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh
         call draw_box_8x8
 
         add di, VIDEO_BUFFER_WIDTH * 8
@@ -449,12 +482,12 @@ draw_border:
     add di, VIDEO_BUFFER_WIDTH - 1
     mov cx, VIDEO_BUFFER_HEIGHT / 16
     .right_side:
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl; 0Ch     ; Setting draw color to red
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl
         call draw_box_8x8
 
         add di, VIDEO_BUFFER_WIDTH * 8
 
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh; 0Eh     ; Setting draw color to yellow
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh
         call draw_box_8x8
 
         add di, VIDEO_BUFFER_WIDTH * 8
@@ -466,11 +499,11 @@ draw_border:
     mov cx, (VIDEO_BUFFER_WIDTH - 2) / 2
     .top_side:
         inc di
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh; 0Eh     ; Color yellow
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh
         call draw_box_8x8
 
         inc di
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl; 0Ch     ; Color red
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl
         call draw_box_8x8
 
         loop .top_side
@@ -481,17 +514,20 @@ draw_border:
     mov cx, (VIDEO_BUFFER_WIDTH - 2) / 2
     .bottom_side:
         inc di
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh; 0Eh     ; Color yellow
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bh
         call draw_box_8x8
 
         inc di
-        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl; 0Ch     ; Color red
+        SET_VGA_REGISTER SC_INDEX_REG, SC_MAP_MASK, bl
         call draw_box_8x8
 
         loop .bottom_side
 
     ret
 
+;
+; Draw a single 8x8 block starting at ds:di
+;
 draw_box_8x8:
     push di
 
